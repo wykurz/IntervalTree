@@ -4,9 +4,9 @@
 #include "Test.h"
 
 #include <cstdint>
+#include <deque>
 #include <iostream>
 #include <utility>
-#include <vector>
 
 #include <boost/test/unit_test.hpp>
 
@@ -14,7 +14,7 @@ typedef std::size_t             Count;
 typedef std::size_t             Index;
 typedef std::pair<Index, Index> Interval;
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
 #define debug(x) std::cerr << "DEBUG: " << x << std::endl
@@ -87,7 +87,7 @@ class Tree
         Count    count;
     };
 
-    typedef std::vector<Node> NodeList;
+    typedef std::deque<Node> NodeList;
 
     Tree(const Interval& interval_);
 
@@ -154,7 +154,7 @@ Interval Tree::findNthIntervalImpl(Count nth_, Index i_) const
             nth_ -= leftCount;
         }
     }
-    if (0 != node.right)
+    if (0 != node.right && 0 != _nodes[node.right].count)
     {
         return findNthIntervalImpl(nth_, node.right);
     }
@@ -172,17 +172,16 @@ Index Tree::addNode(const Interval& interval_)
 
 bool Tree::complementOfImpl(const Interval& interval_, Index i_)
 {
-    const Node& node(_nodes[i_]);
+    Node& node(_nodes[i_]);
     debug("Processing complement of node " << i_ << ":" << node);
     if (0 != node.left && intervalContains(_nodes[node.left].interval, interval_))
     {
         if (complementOfImpl(interval_, node.left))
         {
-            Node& changeNode(_nodes[i_]);
-            changeNode.count = _nodes[changeNode.left].count;
-            if (0 != changeNode.right)
+            node.count = _nodes[node.left].count;
+            if (0 != node.right)
             {
-                changeNode.count += _nodes[changeNode.right].count;
+                node.count += _nodes[node.right].count;
             }
             return true;
         }
@@ -192,11 +191,10 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
     {
         if (complementOfImpl(interval_, node.right))
         {
-            Node& changeNode(_nodes[i_]);
-            changeNode.count = _nodes[changeNode.right].count;
-            if (0 != changeNode.left)
+            node.count = _nodes[node.right].count;
+            if (0 != node.left)
             {
-                changeNode.count += _nodes[changeNode.left].count;
+                node.count += _nodes[node.left].count;
             }
             return true;
         }
@@ -215,41 +213,32 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
         const Index bp = interval_.second;
         if (intervalStrictlyWithin(node.interval, interval_))
         {
-            const Interval  leftInterval(a,      ap - 1);
-            const Interval rightInterval(bp + 1, b     );
-
-            const Index  leftIndex = addNode( leftInterval);
-            const Index rightIndex = addNode(rightInterval);
-
-            Node& changeNode(_nodes[i_]);
-            changeNode.left  = leftIndex;
-            changeNode.right = rightIndex;
-            changeNode.count = _nodes[leftIndex].count + _nodes[rightIndex].count;
+            node.left  = addNode(Interval(a,      ap - 1));
+            node.right = addNode(Interval(bp + 1, b     ));
+            node.count = _nodes[node.left].count + _nodes[node.right].count;
         }
         else
         {
-            Node& changeNode(_nodes[i_]);
             if (a < ap)
             {
                 assert(b <= bp);
-                changeNode.interval = Interval(a, ap - 1);
+                node.interval = Interval(a, ap - 1);
             }
             else if (bp < b)
             {
                 assert(ap <= a);
-                changeNode.interval = Interval(bp + 1, b);
+                node.interval = Interval(bp + 1, b);
             }
             else
             {
                 // Remove whole node
                 assert(ap == a);
                 assert(bp == b);
-                changeNode.interval = Interval(1, 0); // invalid
+                node.interval = Interval(1, 0); // invalid
             }
-            changeNode.count = numAllIntervals(changeNode.interval);
+            node.count = numAllIntervals(node.interval);
         }
-        const Node& updatedNode(_nodes[i_]);
-        debug("Updated node " << i_ << ":" << updatedNode);
+        debug("Updated node " << i_ << ":" << node);
         return true;
     }
     return false;
