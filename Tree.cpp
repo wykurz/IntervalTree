@@ -116,10 +116,12 @@ class Tree
   public:
     struct Node
     {
+        bool     isLeaf;
         Interval interval;
         Index    left;
         Index    right;
         Count    count;
+        Count    depth;
     };
 
     typedef std::deque<Node> NodeList;
@@ -134,11 +136,16 @@ class Tree
   private:
     Interval findNthIntervalImpl(Count nth_, Index i_) const;
     Index addNode(const Interval& interval_);
+    void updateNode(Index i_);
+    void balanceNode(Index i_);
     bool complementOfImpl(const Interval& interval_, Index i_);
+    const Node& left( const Node& node_) const;
+          Node& left( const Node& node_);
+    const Node& right(const Node& node_) const;
+          Node& right(const Node& node_);
 
     NodeList _nodes;
 };
-
 
 namespace std {
 
@@ -148,7 +155,8 @@ namespace std {
                 << "{ interval : " << node_.interval << "\n"
                 << "  left     : " << node_.left << "\n"
                 << "  right    : " << node_.right << "\n"
-                << "  count    : " << node_.count << " }";
+                << "  count    : " << node_.count << "\n"
+                << "  depth    : " << node_.depth << " }";
         return stream_;
     }
 
@@ -156,7 +164,7 @@ namespace std {
 
 Tree::Tree(const Interval& interval_)
 {
-    _nodes.push_back({interval_, 0, 0, interval_.numIntervals()});
+    addNode(interval_);
 }
 
 Count Tree::countIntervals() const
@@ -177,70 +185,101 @@ bool Tree::complementOf(const Interval& interval_)
 Interval Tree::findNthIntervalImpl(Count nth_, Index i_) const
 {
     const Node& node(_nodes[i_]);
-    if (0 != node.left)
+    if (node.isLeaf)
     {
-        const Count leftCount = _nodes[node.left].count;
-        if (nth_ < leftCount)
-        {
-            return findNthIntervalImpl(nth_, node.left);
-        }
-        else
-        {
-            nth_ -= leftCount;
-        }
+        return node.interval.findNthInterval(nth_);
     }
-    if (0 != node.right && 0 != _nodes[node.right].count)
+    const Count leftCount = left(node).count;
+    if (nth_ < leftCount)
     {
-        return findNthIntervalImpl(nth_, node.right);
+        return findNthIntervalImpl(nth_, node.left);
     }
+    nth_ -= leftCount;
     assert(nth_ < node.count);
-    return node.interval.findNthInterval(nth_);
+    return findNthIntervalImpl(nth_, node.right);
 }
 
 Index Tree::addNode(const Interval& interval_)
 {
     Index i = _nodes.size();
-    _nodes.push_back({interval_, 0, 0, interval_.numIntervals()});
+    _nodes.push_back({true, interval_, 0, 0, interval_.numIntervals(), 0});
     debug("Created new node " << i << ":" << _nodes[i]);
     return i;
+}
+
+void Tree::updateNode(Index i_)
+{
+    Node& node(_nodes[i_]);
+    if (node.isLeaf)
+    {
+        node.count = node.interval.numIntervals();
+        node.depth = 0;
+        return;
+    }
+    node.interval = Interval(left(node).interval.a(), right(node).interval.b());
+    node.count = left(node).count + right(node).count;
+    node.depth = std::max(1 + left(node). depth, 1 + right(node).depth);
+}
+
+void Tree::balanceNode(Index i_)
+{
+    Node& node(_nodes[i_]);
+    if (node.isLeaf)
+    {
+        return;
+    }
+    int depthDiff = left(node).depth - right(node).depth;
+    if (1 < depthDiff)
+    {
+        debug("Rotate right");
+        //     Q        P
+        //    / \      / \ .
+        //   P   C    A   Q
+        //  / \          / \.
+        // A   B        B   C
+        //
+        Index P = node.left;
+        Index Q = i_;
+        Index B = _nodes[P].right;
+        _nodes[P].right = Q;
+        _nodes[Q].left  = B;
+        std::swap(_nodes[P], _nodes[Q]);
+        assert(_nodes[i_].right == Q);
+        updateNode(Q);
+        updateNode(P);
+    }
+    if (depthDiff < -1)
+    {
+        debug("Rotate left");
+        //   P          Q
+        //  / \        / \.
+        // A   Q      P   C
+        //    / \    / \.
+        //   B   C  A   B
+        //
+        Index P = i_;
+        Index Q = node.right;
+        Index B = _nodes[Q].left;
+        _nodes[P].right = B;
+        _nodes[Q].left  = P;
+        std::swap(_nodes[P], _nodes[Q]);
+        assert(_nodes[i_].left == P);
+        updateNode(P);
+        updateNode(Q);
+    }
 }
 
 bool Tree::complementOfImpl(const Interval& interval_, Index i_)
 {
     Node& node(_nodes[i_]);
     debug("Processing complement of node " << i_ << ":" << node);
-    if (0 != node.left && _nodes[node.left].interval.contains(interval_))
-    {
-        if (complementOfImpl(interval_, node.left))
-        {
-            node.count = _nodes[node.left].count;
-            if (0 != node.right)
-            {
-                node.count += _nodes[node.right].count;
-            }
-            return true;
-        }
-        return false;
-    }
-    if (0 != node.right && _nodes[node.right].interval.contains(interval_))
-    {
-        if (complementOfImpl(interval_, node.right))
-        {
-            node.count = _nodes[node.right].count;
-            if (0 != node.left)
-            {
-                node.count += _nodes[node.left].count;
-            }
-            return true;
-        }
-        return false;
-    }
     if (!node.interval.contains(interval_))
     {
         debug(node.interval << " does not contain " << interval_);
         return false;
     }
-    if (0 == node.left && 0 == node.right)
+    bool updated = false;
+    if (node.isLeaf)
     {
         const Index a  = node.interval.a();
         const Index b  = node.interval.b();
@@ -248,9 +287,9 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
         const Index bp = interval_.b();
         if (node.interval.hasStrictlyWithin(interval_))
         {
-            node.left  = addNode(Interval(a,      ap - 1));
-            node.right = addNode(Interval(bp + 1, b     ));
-            node.count = _nodes[node.left].count + _nodes[node.right].count;
+            node.isLeaf = false;
+            node.left   = addNode(Interval(a,      ap - 1));
+            node.right  = addNode(Interval(bp + 1, b     ));
         }
         else
         {
@@ -271,12 +310,46 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
                 assert(bp == b);
                 node.interval = Interval(1, 0); // invalid
             }
-            node.count = node.interval.numIntervals();
         }
-        debug("Updated node " << i_ << ":" << node);
-        return true;
+        updated = true;
     }
-    return false;
+    else if (left(node).interval.contains(interval_))
+    {
+        updated = complementOfImpl(interval_, node.left);
+    }
+    else if (right(node).interval.contains(interval_))
+    {
+        updated = complementOfImpl(interval_, node.right);
+    }
+    if (updated)
+    {
+        updateNode(i_);
+        balanceNode(i_);
+        debug("Updated node " << i_ << ":" << node);
+    }
+    return updated;
+}
+
+const Tree::Node& Tree::left(const Node& node_) const
+{
+    assert(node_.left < _nodes.size());
+    return _nodes[node_.left];
+}
+
+Tree::Node& Tree::left(const Node& node_)
+{
+    return const_cast<Node&>(static_cast<const Tree*>(this)->left(node_));
+}
+
+const Tree::Node& Tree::right(const Node& node_) const
+{
+    assert(node_.right < _nodes.size());
+    return _nodes[node_.right];
+}
+
+Tree::Node& Tree::right(const Node& node_)
+{
+    return const_cast<Node&>(static_cast<const Tree*>(this)->right(node_));
 }
 
 BOOST_AUTO_TEST_SUITE(IntervalTree)
@@ -348,7 +421,7 @@ BOOST_AUTO_TEST_CASE(Basic)
     // [0, 0]
     BOOST_REQUIRE_EQUAL(1, t.countIntervals());
     {
-        const Interval i = t.findNthInterval(1);
+        const Interval i = t.findNthInterval(0);
         BOOST_REQUIRE_EQUAL(Interval(0, 0), i);
         BOOST_REQUIRE(t.complementOf(i));
     }
@@ -380,9 +453,9 @@ BOOST_AUTO_TEST_CASE(Large)
     // Remove all [<even>, <even>]
     for (Index i = 0; i < N; i += 2)
     {
-        BOOST_CHECK(t.complementOf(Interval(i, i)));
+        BOOST_REQUIRE(t.complementOf(Interval(i, i)));
     }
-    BOOST_CHECK_EQUAL(N / 2, t.countIntervals());
+    BOOST_REQUIRE_EQUAL(N / 2, t.countIntervals());
 
 }
 
