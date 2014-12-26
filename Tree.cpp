@@ -10,10 +10,6 @@
 
 #include <boost/test/unit_test.hpp>
 
-typedef std::size_t             Count;
-typedef std::size_t             Index;
-typedef std::pair<Index, Index> Interval;
-
 // #define DEBUG
 
 #ifdef DEBUG
@@ -22,58 +18,97 @@ typedef std::pair<Index, Index> Interval;
 #define debug(x)
 #endif
 
+typedef std::size_t Count;
+typedef std::size_t Index;
+
+class Interval
+{
+  public:
+    Interval(Index a_, Index b_);
+
+    Index a() const;
+    Index b() const;
+
+    bool          operator==(const Interval& i_  ) const;
+    Count       numIntervals(                    ) const;
+    Interval findNthInterval(Count           nth_) const;
+    bool            contains(const Interval& i_  ) const;
+    bool   hasStrictlyWithin(const Interval& i_  ) const;
+
+  private:
+    Index _a;
+    Index _b;
+};
+
+Interval::Interval(Index a_, Index b_)
+  : _a(a_), _b(b_)
+{
+    if (_b < _a)
+    {
+        // throw
+    }
+}
+
+Index Interval::a() const
+{
+    return _a;
+}
+
+Index Interval::b() const
+{
+    return _b;
+}
+
+bool Interval::operator==(const Interval& i_  ) const
+{
+    return _a == i_._a && _b == i_._b;
+}
+
+Count Interval::numIntervals() const
+{
+    Count n = _b - _a + 1;
+    return n * (n + 1) / 2;
+}
+
+Interval Interval::findNthInterval(Count nth_) const
+{
+    // TODO: too slow
+    Index a2 = _a;
+    Index b2 = _a;
+    while (0 < nth_--)
+    {
+        if (b2 < _b)
+        {
+            ++b2;
+        }
+        else
+        {
+            assert(a2 < _b);
+            ++a2;
+            b2 = a2;
+        }
+    }
+    return Interval(a2, b2);
+}
+
+bool Interval::contains(const Interval& i_) const
+{
+    return _a <= i_._a && i_._b <= _b;
+}
+
+bool Interval::hasStrictlyWithin(const Interval& i_) const
+{
+    return _a < i_._a && i_._b < _b;
+}
+
 namespace std {
 
     inline ostream& operator<<(ostream& stream_, const Interval& interval_)
     {
-        stream_ << "[" << interval_.first << ", " << interval_.second << "]";
+        stream_ << "[" << interval_.a() << ", " << interval_.b() << "]";
         return stream_;
     }
 
-}
-
-Count numAllIntervals(const Interval& interval_)
-{
-    if (interval_.second < interval_.first)
-    {
-        return 0;
-    }
-    Count n = interval_.second - interval_.first + 1;
-    return n * (n + 1) / 2;
-}
-
-Interval findNthContInterval(Count nth_, const Interval& interval_)
-{
-    // TODO: too slow
-    Index A = interval_.first;
-    Index B = interval_.second;
-    Index a = A;
-    Index b = A;
-    Interval interval(interval_.first, interval_.first);
-    while (0 < nth_--)
-    {
-        if (b < B)
-        {
-            ++b;
-        }
-        else
-        {
-            assert(a < B);
-            ++a;
-            b = a;
-        }
-    }
-    return Interval(a, b);
-}
-
-bool intervalContains(const Interval& a_, const Interval& b_)
-{
-    return a_.first <= b_.first && b_.second <= a_.second;
-}
-
-bool intervalStrictlyWithin(const Interval& a_, const Interval& b_)
-{
-    return a_.first < b_.first && b_.second < a_.second;
 }
 
 class Tree
@@ -121,7 +156,7 @@ namespace std {
 
 Tree::Tree(const Interval& interval_)
 {
-    _nodes.push_back({interval_, 0, 0, numAllIntervals(interval_)});
+    _nodes.push_back({interval_, 0, 0, interval_.numIntervals()});
 }
 
 Count Tree::countIntervals() const
@@ -159,13 +194,13 @@ Interval Tree::findNthIntervalImpl(Count nth_, Index i_) const
         return findNthIntervalImpl(nth_, node.right);
     }
     assert(nth_ < node.count);
-    return findNthContInterval(nth_, node.interval);
+    return node.interval.findNthInterval(nth_);
 }
 
 Index Tree::addNode(const Interval& interval_)
 {
     Index i = _nodes.size();
-    _nodes.push_back({interval_, 0, 0, numAllIntervals(interval_)});
+    _nodes.push_back({interval_, 0, 0, interval_.numIntervals()});
     debug("Created new node " << i << ":" << _nodes[i]);
     return i;
 }
@@ -174,7 +209,7 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
 {
     Node& node(_nodes[i_]);
     debug("Processing complement of node " << i_ << ":" << node);
-    if (0 != node.left && intervalContains(_nodes[node.left].interval, interval_))
+    if (0 != node.left && _nodes[node.left].interval.contains(interval_))
     {
         if (complementOfImpl(interval_, node.left))
         {
@@ -187,7 +222,7 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
         }
         return false;
     }
-    if (0 != node.right && intervalContains(_nodes[node.right].interval, interval_))
+    if (0 != node.right && _nodes[node.right].interval.contains(interval_))
     {
         if (complementOfImpl(interval_, node.right))
         {
@@ -200,18 +235,18 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
         }
         return false;
     }
-    if (!intervalContains(node.interval, interval_))
+    if (!node.interval.contains(interval_))
     {
         debug(node.interval << " does not contain " << interval_);
         return false;
     }
     if (0 == node.left && 0 == node.right)
     {
-        const Index a  = node.interval.first;
-        const Index b  = node.interval.second;
-        const Index ap = interval_.first;
-        const Index bp = interval_.second;
-        if (intervalStrictlyWithin(node.interval, interval_))
+        const Index a  = node.interval.a();
+        const Index b  = node.interval.b();
+        const Index ap = interval_.a();
+        const Index bp = interval_.b();
+        if (node.interval.hasStrictlyWithin(interval_))
         {
             node.left  = addNode(Interval(a,      ap - 1));
             node.right = addNode(Interval(bp + 1, b     ));
@@ -236,7 +271,7 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
                 assert(bp == b);
                 node.interval = Interval(1, 0); // invalid
             }
-            node.count = numAllIntervals(node.interval);
+            node.count = node.interval.numIntervals();
         }
         debug("Updated node " << i_ << ":" << node);
         return true;
@@ -253,37 +288,34 @@ Test::Predicate someCheck()
     return issues.predicate;
 }
 
-// bool intervalContains(const Interval& a_, const Interval& b_)
-// bool intervalStrictlyWithin(const Interval& a_, const Interval& b_)
-
 BOOST_AUTO_TEST_CASE(Preliminary)
 {
-    BOOST_CHECK_EQUAL(Interval(0, 0), findNthContInterval(0, Interval(0, 0)));
-    BOOST_CHECK_EQUAL(Interval(0, 0), findNthContInterval(0, Interval(0, 1)));
-    BOOST_CHECK_EQUAL(Interval(0, 0), findNthContInterval(0, Interval(0, 5)));
-    BOOST_CHECK_EQUAL(Interval(4, 7), findNthContInterval(8, Interval(3, 7)));
-    BOOST_CHECK_EQUAL(Interval(2, 2), findNthContInterval(2, Interval(1, 2)));
-    BOOST_CHECK_EQUAL(Interval(1e3, 1e3), findNthContInterval(500499, Interval(1, 1e3)));
+    BOOST_CHECK_EQUAL(Interval(0, 0), Interval(0, 0).findNthInterval(0));
+    BOOST_CHECK_EQUAL(Interval(0, 0), Interval(0, 1).findNthInterval(0));
+    BOOST_CHECK_EQUAL(Interval(0, 0), Interval(0, 5).findNthInterval(0));
+    BOOST_CHECK_EQUAL(Interval(4, 7), Interval(3, 7).findNthInterval(8));
+    BOOST_CHECK_EQUAL(Interval(2, 2), Interval(1, 2).findNthInterval(2));
+    BOOST_CHECK_EQUAL(Interval(1e3, 1e3), Interval(1, 1e3).findNthInterval(500499));
 
-    BOOST_CHECK( intervalContains(Interval(0, 4), Interval(0, 0)));
-    BOOST_CHECK( intervalContains(Interval(0, 4), Interval(4, 4)));
-    BOOST_CHECK( intervalContains(Interval(0, 4), Interval(0, 4)));
-    BOOST_CHECK( intervalContains(Interval(0, 4), Interval(1, 3)));
-    BOOST_CHECK(!intervalContains(Interval(0, 4), Interval(1, 5)));
-    BOOST_CHECK(!intervalContains(Interval(0, 4), Interval(5, 5)));
-    BOOST_CHECK(!intervalContains(Interval(2, 4), Interval(0, 1)));
+    BOOST_CHECK( Interval(0, 4).contains(Interval(0, 0)));
+    BOOST_CHECK( Interval(0, 4).contains(Interval(4, 4)));
+    BOOST_CHECK( Interval(0, 4).contains(Interval(0, 4)));
+    BOOST_CHECK( Interval(0, 4).contains(Interval(1, 3)));
+    BOOST_CHECK(!Interval(0, 4).contains(Interval(1, 5)));
+    BOOST_CHECK(!Interval(0, 4).contains(Interval(5, 5)));
+    BOOST_CHECK(!Interval(2, 4).contains(Interval(0, 1)));
 
-    BOOST_CHECK(!intervalStrictlyWithin(Interval(0, 4), Interval(0, 0)));
-    BOOST_CHECK(!intervalStrictlyWithin(Interval(0, 4), Interval(4, 4)));
-    BOOST_CHECK(!intervalStrictlyWithin(Interval(0, 4), Interval(0, 4)));
-    BOOST_CHECK( intervalStrictlyWithin(Interval(0, 4), Interval(1, 1)));
-    BOOST_CHECK( intervalStrictlyWithin(Interval(0, 4), Interval(1, 2)));
-    BOOST_CHECK( intervalStrictlyWithin(Interval(0, 4), Interval(1, 3)));
-    BOOST_CHECK( intervalStrictlyWithin(Interval(0, 4), Interval(2, 3)));
-    BOOST_CHECK( intervalStrictlyWithin(Interval(0, 4), Interval(3, 3)));
-    BOOST_CHECK(!intervalStrictlyWithin(Interval(0, 4), Interval(1, 5)));
-    BOOST_CHECK(!intervalStrictlyWithin(Interval(0, 4), Interval(5, 5)));
-    BOOST_CHECK(!intervalStrictlyWithin(Interval(2, 4), Interval(0, 1)));
+    BOOST_CHECK(!Interval(0, 4).hasStrictlyWithin(Interval(0, 0)));
+    BOOST_CHECK(!Interval(0, 4).hasStrictlyWithin(Interval(4, 4)));
+    BOOST_CHECK(!Interval(0, 4).hasStrictlyWithin(Interval(0, 4)));
+    BOOST_CHECK( Interval(0, 4).hasStrictlyWithin(Interval(1, 1)));
+    BOOST_CHECK( Interval(0, 4).hasStrictlyWithin(Interval(1, 2)));
+    BOOST_CHECK( Interval(0, 4).hasStrictlyWithin(Interval(1, 3)));
+    BOOST_CHECK( Interval(0, 4).hasStrictlyWithin(Interval(2, 3)));
+    BOOST_CHECK( Interval(0, 4).hasStrictlyWithin(Interval(3, 3)));
+    BOOST_CHECK(!Interval(0, 4).hasStrictlyWithin(Interval(1, 5)));
+    BOOST_CHECK(!Interval(0, 4).hasStrictlyWithin(Interval(5, 5)));
+    BOOST_CHECK(!Interval(2, 4).hasStrictlyWithin(Interval(0, 1)));
 }
 
 BOOST_AUTO_TEST_CASE(Basic)
@@ -336,13 +368,13 @@ BOOST_AUTO_TEST_CASE(RemoveInterval)
     BOOST_CHECK(!t.complementOf(Interval(3, 4)));
     BOOST_CHECK( t.complementOf(Interval(0, 0)));
     // [4, 4]
-    BOOST_CHECK(!t.complementOf(Interval(5, 4)));
+    BOOST_CHECK(!t.complementOf(Interval(5, 5)));
     BOOST_CHECK( t.complementOf(Interval(4, 4)));
 }
 
 BOOST_AUTO_TEST_CASE(Large)
 {
-    Index N = 1e6;
+    Index N = 1e4;
     Tree t(Interval(0, N - 1));
 
     // Remove all [<even>, <even>]
