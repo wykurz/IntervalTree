@@ -1,5 +1,5 @@
 #define BOOST_TEST_DYN_LINK
-#define BOOST_TEST_MODULE Bit
+#define BOOST_TEST_MODULE Tree
 
 #include "Test.h"
 
@@ -17,6 +17,14 @@
 #define debug(x) std::cerr << "DEBUG: " << x << std::endl
 #else
 #define debug(x)
+#endif
+
+#define INFO
+
+#ifdef INFO
+#define info(x) std::cerr << "INFO: " << x << std::endl
+#else
+#define info(x)
 #endif
 
 typedef std::size_t Count;
@@ -44,10 +52,6 @@ class Interval
 Interval::Interval(Index a_, Index b_)
   : _a(a_), _b(b_)
 {
-    if (_b < _a)
-    {
-        // throw
-    }
 }
 
 Index Interval::a() const
@@ -138,6 +142,8 @@ class Tree
     Interval findNthInterval(Count nth_) const;
     bool complementOf(const Interval& interval_);
 
+    Count maxDepth() const;
+
   private:
     Interval findNthIntervalImpl(Count nth_, Index i_) const;
     Index addNode(const Interval& interval_);
@@ -190,6 +196,11 @@ Interval Tree::findNthInterval(Count nth_) const
 bool Tree::complementOf(const Interval& interval_)
 {
     return complementOfImpl(interval_, 0);
+}
+
+Count Tree::maxDepth() const
+{
+    return _nodes[0].depth;
 }
 
 Interval Tree::findNthIntervalImpl(Count nth_, Index i_) const
@@ -286,7 +297,7 @@ void Tree::balanceNode(Index i_)
     bool rotateR = (right(node(i_)).depth + 1) <  left(node(i_)).depth;
     if (rotateL)
     {
-        while (!(left(right(node(i_))).depth < right(right(node(i_))).depth))
+        if (!(left(right(node(i_))).depth < right(right(node(i_))).depth))
         {
             rotateRight(node(i_).right);
         }
@@ -295,7 +306,7 @@ void Tree::balanceNode(Index i_)
     }
     else if (rotateR)
     {
-        while (!(right(left(node(i_))).depth < left(left(node(i_))).depth))
+        if (!(right(left(node(i_))).depth < left(left(node(i_))).depth))
         {
             rotateLeft(node(i_).left);
         }
@@ -404,13 +415,6 @@ Tree::Node& Tree::right(const Node& node_)
 
 BOOST_AUTO_TEST_SUITE(IntervalTree)
 
-Test::Predicate someCheck()
-{
-    Test::TestIssues issues;
-    issues << "Sorry, there were issues";
-    return issues.predicate;
-}
-
 BOOST_AUTO_TEST_CASE(Preliminary)
 {
     BOOST_CHECK_EQUAL(Interval(0, 0), Interval(0, 0).findNthInterval(0));
@@ -505,16 +509,35 @@ BOOST_AUTO_TEST_CASE(RemoveInterval)
     BOOST_CHECK( t.complementOf(Interval(4, 4)));
 }
 
+Test::Predicate perfCheck(const Index n_)
+{
+    Test::TestIssues issues;
+    Tree t(Interval(0, n_ - 1));
+    // Remove all [<even>, <even>]
+    for (Index i = 0; i < n_; i += 2)
+    {
+        if (!t.complementOf(Interval(i, i)))
+        {
+            issues << "t.complementOf(Interval(" << i << ", " << i << "))) failed!";
+        }
+    }
+    const Count result = t.countIntervals();
+    if (n_ / 2 != result)
+    {
+        issues << "Result is wrong: " << (n_ / 2) << " != " << result;
+    }
+    info("Max tree depth: " << t.maxDepth());
+    return issues.predicate;
+}
+
+BOOST_AUTO_TEST_CASE(Medium)
+{
+    perfCheck(1e4);
+}
+
 BOOST_AUTO_TEST_CASE(Large)
 {
-    Index N = 1e6;
-    Tree t(Interval(0, N - 1));
-    // Remove all [<even>, <even>]
-    for (Index i = 0; i < N; i += 2)
-    {
-        BOOST_REQUIRE(t.complementOf(Interval(i, i)));
-    }
-    BOOST_REQUIRE_EQUAL(N / 2, t.countIntervals());
+    perfCheck(1e6);
 }
 
 BOOST_AUTO_TEST_CASE(Huge)
