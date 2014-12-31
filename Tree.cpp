@@ -137,8 +137,12 @@ class Tree
     Interval findNthIntervalImpl(Count nth_, Index i_) const;
     Index addNode(const Interval& interval_);
     void updateNode(Index i_);
+    void rotateRight(Index i_);
+    void rotateLeft(Index i_);
     void balanceNode(Index i_);
     bool complementOfImpl(const Interval& interval_, Index i_);
+    const Node& node(Index i_) const;
+          Node& node(Index i_);
     const Node& left( const Node& node_) const;
           Node& left( const Node& node_);
     const Node& right(const Node& node_) const;
@@ -152,7 +156,8 @@ namespace std {
     inline ostream& operator<<(ostream& stream_, const Tree::Node& node_)
     {
         stream_ << "\n"
-                << "{ interval : " << node_.interval << "\n"
+                << "{ isLeaf   : " << node_.isLeaf << "\n"
+                << "  interval : " << node_.interval << "\n"
                 << "  left     : " << node_.left << "\n"
                 << "  right    : " << node_.right << "\n"
                 << "  count    : " << node_.count << "\n"
@@ -184,150 +189,190 @@ bool Tree::complementOf(const Interval& interval_)
 
 Interval Tree::findNthIntervalImpl(Count nth_, Index i_) const
 {
-    const Node& node(_nodes[i_]);
-    if (node.isLeaf)
+    if (node(i_).isLeaf)
     {
-        return node.interval.findNthInterval(nth_);
+        return node(i_).interval.findNthInterval(nth_);
     }
-    const Count leftCount = left(node).count;
+    const Count leftCount = left(node(i_)).count;
     if (nth_ < leftCount)
     {
-        return findNthIntervalImpl(nth_, node.left);
+        return findNthIntervalImpl(nth_, node(i_).left);
     }
     nth_ -= leftCount;
-    assert(nth_ < node.count);
-    return findNthIntervalImpl(nth_, node.right);
+    assert(nth_ < node(i_).count);
+    return findNthIntervalImpl(nth_, node(i_).right);
 }
 
 Index Tree::addNode(const Interval& interval_)
 {
     Index i = _nodes.size();
     _nodes.push_back({true, interval_, 0, 0, interval_.numIntervals(), 0});
-    debug("Created new node " << i << ":" << _nodes[i]);
+    debug("Created new node " << i << ":" << node(i));
     return i;
 }
 
 void Tree::updateNode(Index i_)
 {
-    Node& node(_nodes[i_]);
-    if (node.isLeaf)
+    if (node(i_).isLeaf)
     {
-        node.count = node.interval.numIntervals();
-        node.depth = 0;
+        node(i_).count = node(i_).interval.numIntervals();
+        node(i_).depth = 0;
         return;
     }
-    node.interval = Interval(left(node).interval.a(), right(node).interval.b());
-    node.count = left(node).count + right(node).count;
-    node.depth = std::max(1 + left(node). depth, 1 + right(node).depth);
+    node(i_).interval = Interval(left(node(i_)).interval.a(), right(node(i_)).interval.b());
+    node(i_).count = left(node(i_)).count + right(node(i_)).count;
+    node(i_).depth = std::max(1 + left(node(i_)). depth, 1 + right(node(i_)).depth);
+}
+
+void Tree::rotateRight(Index i_)
+{
+    debug("Rotate right");
+    assert(!node(i_).isLeaf);
+    //     Q        P
+    //    / \      / \ .
+    //   P   C    A   Q
+    //  / \          / \.
+    // A   B        B   C
+    //
+    Index P = node(i_).left;
+    Index Q = i_;
+    Index B = node(P).right;
+    std::swap(node(P), node(Q));
+    node(Q).right = P;
+    node(P).left  = B;
+    assert(node(i_).left  != i_);
+    assert(node(i_).right != i_);
+    assert(node(i_).right == P);
+    updateNode(P);
+    updateNode(Q);
+}
+
+void Tree::rotateLeft(Index i_)
+{
+    debug("Rotate left");
+    assert(!node(i_).isLeaf);
+    //   P          Q
+    //  / \        / \.
+    // A   Q      P   C
+    //    / \    / \.
+    //   B   C  A   B
+    //
+    Index P = i_;
+    Index Q = node(i_).right;
+    Index B = node(Q).left;
+    std::swap(node(P), node(Q));
+    node(Q).right = B;
+    node(P).left  = Q;
+    assert(node(i_).left  != i_);
+    assert(node(i_).right != i_);
+    assert(node(i_).left  == Q);
+    updateNode(Q);
+    updateNode(P);
 }
 
 void Tree::balanceNode(Index i_)
 {
-    Node& node(_nodes[i_]);
-    if (node.isLeaf)
+    // TODO: consider left-right & right-left cases
+    if (node(i_).isLeaf)
     {
         return;
     }
-    int depthDiff = left(node).depth - right(node).depth;
-    if (1 < depthDiff)
+    bool rotateL = ( left(node(i_)).depth + 1) < right(node(i_)).depth;
+    bool rotateR = (right(node(i_)).depth + 1) <  left(node(i_)).depth;
+    if (rotateL)
     {
-        debug("Rotate right");
-        //     Q        P
-        //    / \      / \ .
-        //   P   C    A   Q
-        //  / \          / \.
-        // A   B        B   C
-        //
-        Index P = node.left;
-        Index Q = i_;
-        Index B = _nodes[P].right;
-        _nodes[P].right = Q;
-        _nodes[Q].left  = B;
-        std::swap(_nodes[P], _nodes[Q]);
-        assert(_nodes[i_].right == Q);
-        updateNode(Q);
-        updateNode(P);
+        while (!(left(right(node(i_))).depth < right(right(node(i_))).depth))
+        {
+            rotateRight(node(i_).right);
+        }
+        assert(left(right(node(i_))).depth < right(right(node(i_))).depth);
+        rotateLeft(i_);
     }
-    if (depthDiff < -1)
+    else if (rotateR)
     {
-        debug("Rotate left");
-        //   P          Q
-        //  / \        / \.
-        // A   Q      P   C
-        //    / \    / \.
-        //   B   C  A   B
-        //
-        Index P = i_;
-        Index Q = node.right;
-        Index B = _nodes[Q].left;
-        _nodes[P].right = B;
-        _nodes[Q].left  = P;
-        std::swap(_nodes[P], _nodes[Q]);
-        assert(_nodes[i_].left == P);
-        updateNode(P);
-        updateNode(Q);
+        while (!(right(left(node(i_))).depth < left(left(node(i_))).depth))
+        {
+            rotateLeft(node(i_).left);
+        }
+        assert(right(left(node(i_))).depth < left(left(node(i_))).depth);
+        rotateRight(i_);
     }
+    assert(std::abs(static_cast<int>(left(node(i_)).depth) - static_cast<int>(right(node(i_)).depth) < 2));
 }
 
 bool Tree::complementOfImpl(const Interval& interval_, Index i_)
 {
-    Node& node(_nodes[i_]);
-    debug("Processing complement of node " << i_ << ":" << node);
-    if (!node.interval.contains(interval_))
+    debug("Processing complement of node " << i_ << ":" << node(i_));
+    if (!node(i_).interval.contains(interval_))
     {
-        debug(node.interval << " does not contain " << interval_);
+        debug(node(i_).interval << " does not contain " << interval_);
         return false;
     }
     bool updated = false;
-    if (node.isLeaf)
+    if (node(i_).isLeaf)
     {
-        const Index a  = node.interval.a();
-        const Index b  = node.interval.b();
+        const Index a  = node(i_).interval.a();
+        const Index b  = node(i_).interval.b();
         const Index ap = interval_.a();
         const Index bp = interval_.b();
-        if (node.interval.hasStrictlyWithin(interval_))
+        if (node(i_).interval.hasStrictlyWithin(interval_))
         {
-            node.isLeaf = false;
-            node.left   = addNode(Interval(a,      ap - 1));
-            node.right  = addNode(Interval(bp + 1, b     ));
+            node(i_).isLeaf = false;
+            node(i_).left   = addNode(Interval(a,      ap - 1));
+            node(i_).right  = addNode(Interval(bp + 1, b     ));
+            assert(node(i_).left  != node(i_).right);
+            assert(node(i_).left  != i_);
+            assert(node(i_).right != i_);
+            debug("Created leaf nodes " << node(i_).left << " and " << node(i_).right);
         }
         else
         {
             if (a < ap)
             {
                 assert(b <= bp);
-                node.interval = Interval(a, ap - 1);
+                node(i_).interval = Interval(a, ap - 1);
             }
             else if (bp < b)
             {
                 assert(ap <= a);
-                node.interval = Interval(bp + 1, b);
+                node(i_).interval = Interval(bp + 1, b);
             }
             else
             {
                 // Remove whole node
                 assert(ap == a);
                 assert(bp == b);
-                node.interval = Interval(1, 0); // invalid
+                node(i_).interval = Interval(1, 0); // invalid
             }
         }
         updated = true;
     }
-    else if (left(node).interval.contains(interval_))
+    else if (left(node(i_)).interval.contains(interval_))
     {
-        updated = complementOfImpl(interval_, node.left);
+        updated = complementOfImpl(interval_, node(i_).left);
     }
-    else if (right(node).interval.contains(interval_))
+    else if (right(node(i_)).interval.contains(interval_))
     {
-        updated = complementOfImpl(interval_, node.right);
+        updated = complementOfImpl(interval_, node(i_).right);
     }
     if (updated)
     {
         updateNode(i_);
         balanceNode(i_);
-        debug("Updated node " << i_ << ":" << node);
+        debug("Updated node " << i_ << ":" << node(i_));
     }
     return updated;
+}
+
+const Tree::Node& Tree::node(Index i_) const
+{
+    assert(i_ < _nodes.size());
+    return _nodes[i_];
+}
+
+Tree::Node& Tree::node(Index i_)
+{
+    return const_cast<Node&>(static_cast<const Tree*>(this)->node(i_));
 }
 
 const Tree::Node& Tree::left(const Node& node_) const
