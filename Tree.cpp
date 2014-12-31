@@ -5,7 +5,7 @@
 
 #include <cmath>
 #include <cstdint>
-#include <deque>
+#include <vector>
 #include <iostream>
 #include <utility>
 
@@ -133,7 +133,7 @@ class Tree
         Count    depth;
     };
 
-    typedef std::deque<Node> NodeList;
+    typedef std::vector<Node> NodeList;
 
     Tree(const Interval& interval_);
 
@@ -334,8 +334,12 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
         if (node(i_).interval.hasStrictlyWithin(interval_))
         {
             node(i_).isLeaf = false;
-            node(i_).left   = addNode(Interval(a,      ap - 1));
-            node(i_).right  = addNode(Interval(bp + 1, b     ));
+            {
+                Index left  = addNode(Interval(a,      ap - 1));
+                Index right = addNode(Interval(bp + 1, b     ));
+                node(i_).left  = left;
+                node(i_).right = right;
+            }
             assert(node(i_).left  != node(i_).right);
             assert(node(i_).left  != i_);
             assert(node(i_).right != i_);
