@@ -3,6 +3,7 @@
 
 #include "Test.h"
 
+#include <cmath>
 #include <cstdint>
 #include <deque>
 #include <iostream>
@@ -72,23 +73,27 @@ Count Interval::numIntervals() const
 
 Interval Interval::findNthInterval(Count nth_) const
 {
-    // TODO: too slow
-    Index a2 = _a;
-    Index b2 = _a;
-    while (0 < nth_--)
+    const Index d = _b - _a + 1;
+    // x * d - x * (x - 1) / 2 + y < n
+    auto f = [=](Index x_)
+        {
+            const Index sum = x_ * (x_ - 1) / 2;
+            return (x_ <= d) && (sum <= x_ * d) && (x_ * d <= sum + nth_ );
+        };
+    Index x = 0;
+    while (f(x + 1))
     {
-        if (b2 < _b)
+        Index k = 1;
+        while (f(x + 2 * k))
         {
-            ++b2;
+            k *= 2;
         }
-        else
-        {
-            assert(a2 < _b);
-            ++a2;
-            b2 = a2;
-        }
+        x += k;
     }
-    return Interval(a2, b2);
+    assert( f(x));
+    assert(!f(x + 1));
+    nth_ -= d * x - x * (x - 1) / 2;
+    return Interval(_a + x, _a + x + nth_);
 }
 
 bool Interval::contains(const Interval& i_) const
@@ -413,6 +418,8 @@ BOOST_AUTO_TEST_CASE(Preliminary)
     BOOST_CHECK_EQUAL(Interval(0, 0), Interval(0, 5).findNthInterval(0));
     BOOST_CHECK_EQUAL(Interval(4, 7), Interval(3, 7).findNthInterval(8));
     BOOST_CHECK_EQUAL(Interval(2, 2), Interval(1, 2).findNthInterval(2));
+    BOOST_CHECK_EQUAL(Interval(1e1, 1e1), Interval(1, 1e1).findNthInterval(54));
+    BOOST_CHECK_EQUAL(Interval(1e2, 1e2), Interval(1, 1e2).findNthInterval(5049));
     BOOST_CHECK_EQUAL(Interval(1e3, 1e3), Interval(1, 1e3).findNthInterval(500499));
 
     BOOST_CHECK( Interval(0, 4).contains(Interval(0, 0)));
@@ -434,6 +441,14 @@ BOOST_AUTO_TEST_CASE(Preliminary)
     BOOST_CHECK(!Interval(0, 4).hasStrictlyWithin(Interval(1, 5)));
     BOOST_CHECK(!Interval(0, 4).hasStrictlyWithin(Interval(5, 5)));
     BOOST_CHECK(!Interval(2, 4).hasStrictlyWithin(Interval(0, 1)));
+}
+
+BOOST_AUTO_TEST_CASE(IntervalPerf)
+{
+    for (std::size_t i = 1; i <= 1e6; ++i)
+    {
+        BOOST_CHECK_EQUAL(Interval(1e9, 1e9), Interval(1, 1e9).findNthInterval(500000000499999999));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(Basic)
@@ -492,16 +507,26 @@ BOOST_AUTO_TEST_CASE(RemoveInterval)
 
 BOOST_AUTO_TEST_CASE(Large)
 {
-    Index N = 1e4;
+    Index N = 1e6;
     Tree t(Interval(0, N - 1));
-
     // Remove all [<even>, <even>]
     for (Index i = 0; i < N; i += 2)
     {
         BOOST_REQUIRE(t.complementOf(Interval(i, i)));
     }
     BOOST_REQUIRE_EQUAL(N / 2, t.countIntervals());
+}
 
+BOOST_AUTO_TEST_CASE(Huge)
+{
+    Index N = 1e9;
+    Tree t(Interval(0, N - 1));
+    // Remove all [<even>, <even>]
+    for (Index i = 0; i < N; i += 1e3)
+    {
+        BOOST_REQUIRE(t.complementOf(Interval(i, i)));
+    }
+    BOOST_REQUIRE_EQUAL(499500000000, t.countIntervals());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
