@@ -11,20 +11,29 @@
 
 #include <boost/test/unit_test.hpp>
 
-// #define DEBUG
+// #define LOG_DEBUG
 
-#ifdef DEBUG
-#define debug(x) std::cerr << "DEBUG: " << x << std::endl
+#ifdef LOG_DEBUG
+#define DEBUG(x) std::cerr << "DEBUG: " << x << std::endl
 #else
-#define debug(x)
+#define DEBUG(x)
 #endif
 
-#define INFO
+// #define LOG_INFO
 
-#ifdef INFO
-#define info(x) std::cerr << "INFO: " << x << std::endl
+#ifdef LOG_INFO
+#define INFO(x) std::cerr << "INFO: " << x << std::endl
 #else
-#define info(x)
+#define INFO(x)
+#endif
+
+// Disabling assertions gives about 40% perf improvement
+// #define CHECK_ASSERT
+
+#ifdef CHECK_ASSERT
+#define ASSERT(x) assert(x)
+#else
+#define ASSERT(x)
 #endif
 
 typedef std::size_t Count;
@@ -94,8 +103,8 @@ Interval Interval::findNthInterval(Count nth_) const
         }
         x += k;
     }
-    assert( f(x));
-    assert(!f(x + 1));
+    ASSERT( f(x));
+    ASSERT(!f(x + 1));
     nth_ -= d * x - x * (x - 1) / 2;
     return Interval(_a + x, _a + x + nth_);
 }
@@ -215,7 +224,7 @@ Interval Tree::findNthIntervalImpl(Count nth_, Index i_) const
         return findNthIntervalImpl(nth_, node(i_).left);
     }
     nth_ -= leftCount;
-    assert(nth_ < node(i_).count);
+    ASSERT(nth_ < node(i_).count);
     return findNthIntervalImpl(nth_, node(i_).right);
 }
 
@@ -223,7 +232,7 @@ Index Tree::addNode(const Interval& interval_)
 {
     Index i = _nodes.size();
     _nodes.push_back({true, interval_, 0, 0, interval_.numIntervals(), 0});
-    debug("Created new node " << i << ":" << node(i));
+    DEBUG("Created new node " << i << ":" << node(i));
     return i;
 }
 
@@ -242,8 +251,8 @@ void Tree::updateNode(Index i_)
 
 void Tree::rotateRight(Index i_)
 {
-    debug("Rotate right");
-    assert(!node(i_).isLeaf);
+    DEBUG("Rotate right");
+    ASSERT(!node(i_).isLeaf);
     //     Q        P
     //    / \      / \ .
     //   P   C    A   Q
@@ -256,17 +265,17 @@ void Tree::rotateRight(Index i_)
     std::swap(node(P), node(Q));
     node(Q).right = P;
     node(P).left  = B;
-    assert(node(i_).left  != i_);
-    assert(node(i_).right != i_);
-    assert(node(i_).right == P);
+    ASSERT(node(i_).left  != i_);
+    ASSERT(node(i_).right != i_);
+    ASSERT(node(i_).right == P);
     updateNode(P);
     updateNode(Q);
 }
 
 void Tree::rotateLeft(Index i_)
 {
-    debug("Rotate left");
-    assert(!node(i_).isLeaf);
+    DEBUG("Rotate left");
+    ASSERT(!node(i_).isLeaf);
     //   P          Q
     //  / \        / \.
     // A   Q      P   C
@@ -279,9 +288,9 @@ void Tree::rotateLeft(Index i_)
     std::swap(node(P), node(Q));
     node(Q).right = B;
     node(P).left  = Q;
-    assert(node(i_).left  != i_);
-    assert(node(i_).right != i_);
-    assert(node(i_).left  == Q);
+    ASSERT(node(i_).left  != i_);
+    ASSERT(node(i_).right != i_);
+    ASSERT(node(i_).left  == Q);
     updateNode(Q);
     updateNode(P);
 }
@@ -301,7 +310,7 @@ void Tree::balanceNode(Index i_)
         {
             rotateRight(node(i_).right);
         }
-        assert(left(right(node(i_))).depth < right(right(node(i_))).depth);
+        ASSERT(left(right(node(i_))).depth < right(right(node(i_))).depth);
         rotateLeft(i_);
     }
     else if (rotateR)
@@ -310,18 +319,18 @@ void Tree::balanceNode(Index i_)
         {
             rotateLeft(node(i_).left);
         }
-        assert(right(left(node(i_))).depth < left(left(node(i_))).depth);
+        ASSERT(right(left(node(i_))).depth < left(left(node(i_))).depth);
         rotateRight(i_);
     }
-    assert(std::abs(static_cast<int>(left(node(i_)).depth) - static_cast<int>(right(node(i_)).depth) < 2));
+    ASSERT(std::abs(static_cast<int>(left(node(i_)).depth) - static_cast<int>(right(node(i_)).depth) < 2));
 }
 
 bool Tree::complementOfImpl(const Interval& interval_, Index i_)
 {
-    debug("Processing complement of node " << i_ << ":" << node(i_));
+    DEBUG("Processing complement of node " << i_ << ":" << node(i_));
     if (!node(i_).interval.contains(interval_))
     {
-        debug(node(i_).interval << " does not contain " << interval_);
+        DEBUG(node(i_).interval << " does not contain " << interval_);
         return false;
     }
     bool updated = false;
@@ -340,28 +349,28 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
                 node(i_).left  = left;
                 node(i_).right = right;
             }
-            assert(node(i_).left  != node(i_).right);
-            assert(node(i_).left  != i_);
-            assert(node(i_).right != i_);
-            debug("Created leaf nodes " << node(i_).left << " and " << node(i_).right);
+            ASSERT(node(i_).left  != node(i_).right);
+            ASSERT(node(i_).left  != i_);
+            ASSERT(node(i_).right != i_);
+            DEBUG("Created leaf nodes " << node(i_).left << " and " << node(i_).right);
         }
         else
         {
             if (a < ap)
             {
-                assert(b <= bp);
+                ASSERT(b <= bp);
                 node(i_).interval = Interval(a, ap - 1);
             }
             else if (bp < b)
             {
-                assert(ap <= a);
+                ASSERT(ap <= a);
                 node(i_).interval = Interval(bp + 1, b);
             }
             else
             {
                 // Remove whole node
-                assert(ap == a);
-                assert(bp == b);
+                ASSERT(ap == a);
+                ASSERT(bp == b);
                 node(i_).interval = Interval(1, 0); // invalid
             }
         }
@@ -379,14 +388,14 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
     {
         updateNode(i_);
         balanceNode(i_);
-        debug("Updated node " << i_ << ":" << node(i_));
+        DEBUG("Updated node " << i_ << ":" << node(i_));
     }
     return updated;
 }
 
 const Tree::Node& Tree::node(Index i_) const
 {
-    assert(i_ < _nodes.size());
+    ASSERT(i_ < _nodes.size());
     return _nodes[i_];
 }
 
@@ -397,7 +406,7 @@ Tree::Node& Tree::node(Index i_)
 
 const Tree::Node& Tree::left(const Node& node_) const
 {
-    assert(node_.left < _nodes.size());
+    ASSERT(node_.left < _nodes.size());
     return _nodes[node_.left];
 }
 
@@ -408,7 +417,7 @@ Tree::Node& Tree::left(const Node& node_)
 
 const Tree::Node& Tree::right(const Node& node_) const
 {
-    assert(node_.right < _nodes.size());
+    ASSERT(node_.right < _nodes.size());
     return _nodes[node_.right];
 }
 
@@ -530,7 +539,7 @@ Test::Predicate perfCheck(const Index n_)
     {
         issues << "Result is wrong: " << (n_ / 2) << " != " << result;
     }
-    info("Max tree depth: " << t.maxDepth());
+    INFO("Max tree depth: " << t.maxDepth());
     return issues.predicate;
 }
 
