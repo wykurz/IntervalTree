@@ -1,4 +1,3 @@
-#define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Tree
 
 #include "Test.h"
@@ -19,7 +18,7 @@
 #define DEBUG(x)
 #endif
 
-// #define LOG_INFO
+#define LOG_INFO
 
 #ifdef LOG_INFO
 #define INFO(x) std::cerr << "INFO: " << x << std::endl
@@ -52,6 +51,7 @@ class Interval
     Interval findNthInterval(Count           nth_) const;
     bool            contains(const Interval& i_  ) const;
     bool   hasStrictlyWithin(const Interval& i_  ) const;
+    bool             isValid()                     const;
 
   private:
     Index _a;
@@ -117,6 +117,11 @@ bool Interval::contains(const Interval& i_) const
 bool Interval::hasStrictlyWithin(const Interval& i_) const
 {
     return _a < i_._a && i_._b < _b;
+}
+
+bool Interval::isValid() const
+{
+    return _a <= _b;
 }
 
 namespace std {
@@ -244,6 +249,16 @@ void Tree::updateNode(Index i_)
         node(i_).depth = 0;
         return;
     }
+    if (!left(node(i_)).interval.isValid())
+    {
+        std::swap(right(node(i_)), node(i_));
+        return;
+    }
+    if (!right(node(i_)).interval.isValid())
+    {
+        std::swap(left(node(i_)), node(i_));
+        return;
+    }
     node(i_).interval = Interval(left(node(i_)).interval.a(), right(node(i_)).interval.b());
     node(i_).count = left(node(i_)).count + right(node(i_)).count;
     node(i_).depth = std::max(1 + left(node(i_)). depth, 1 + right(node(i_)).depth);
@@ -368,7 +383,7 @@ bool Tree::complementOfImpl(const Interval& interval_, Index i_)
             }
             else
             {
-                // Remove whole node
+                DEBUG("Remove whole node " << i_ << ":" << node(i_));
                 ASSERT(ap == a);
                 ASSERT(bp == b);
                 node(i_).interval = Interval(1, 0); // invalid
@@ -563,6 +578,66 @@ BOOST_AUTO_TEST_CASE(Huge)
         BOOST_REQUIRE(t.complementOf(Interval(i, i)));
     }
     BOOST_REQUIRE_EQUAL(499500000000, t.countIntervals());
+}
+
+BOOST_AUTO_TEST_CASE(Wika0)
+{
+    Tree t(Interval(1, 5));
+    {
+        const Interval i = t.findNthInterval(6);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(2, 3), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    {
+        const Interval i = t.findNthInterval(2);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(4, 5), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    {
+        const Interval i = t.findNthInterval(0);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(1, 1), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    BOOST_REQUIRE_EQUAL(0, t.countIntervals());
+}
+
+BOOST_AUTO_TEST_CASE(Wika1)
+{
+    Tree t(Interval(1, 6));
+    {
+        const Interval i = t.findNthInterval(6);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(2, 2), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    {
+        const Interval i = t.findNthInterval(6);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(4, 5), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    {
+        const Interval i = t.findNthInterval(2);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(6, 6), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    {
+        const Interval i = t.findNthInterval(1);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(3, 3), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    {
+        const Interval i = t.findNthInterval(0);
+        std::cerr << i << std::endl;
+        BOOST_REQUIRE_EQUAL(Interval(1, 1), i);
+        BOOST_REQUIRE(t.complementOf(i));
+    }
+    BOOST_REQUIRE_EQUAL(0, t.countIntervals());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
