@@ -35,8 +35,10 @@
 #define ASSERT(x)
 #endif
 
-typedef std::size_t Count;
-typedef std::size_t Index;
+typedef std::size_t  Count;
+typedef unsigned int Depth;
+typedef std::size_t  Index;
+typedef unsigned int SmallIndex;
 
 class Interval
 {
@@ -54,8 +56,8 @@ class Interval
     bool             isValid()                     const;
 
   private:
-    Index _a;
-    Index _b;
+    SmallIndex _a;
+    SmallIndex _b;
 };
 
 Interval::Interval(Index a_, Index b_)
@@ -139,12 +141,12 @@ class Tree
   public:
     struct Node
     {
-        bool     isLeaf;
-        Interval interval;
-        Index    left;
-        Index    right;
-        Count    count;
-        Count    depth;
+        Interval   interval;
+        SmallIndex left;
+        SmallIndex right;
+        Count      count;
+        Depth      depth;
+        bool       isLeaf;
     };
 
     typedef std::vector<Node> NodeList;
@@ -236,7 +238,7 @@ Interval Tree::findNthIntervalImpl(Count nth_, Index i_) const
 Index Tree::addNode(const Interval& interval_)
 {
     Index i = _nodes.size();
-    _nodes.push_back({true, interval_, 0, 0, interval_.numIntervals(), 0});
+    _nodes.push_back({interval_, 0, 0, interval_.numIntervals(), 0, true});
     DEBUG("Created new node " << i << ":" << node(i));
     return i;
 }
@@ -609,35 +611,56 @@ BOOST_AUTO_TEST_CASE(Wika1)
     Tree t(Interval(1, 6));
     {
         const Interval i = t.findNthInterval(6);
-        std::cerr << i << std::endl;
         BOOST_REQUIRE_EQUAL(Interval(2, 2), i);
         BOOST_REQUIRE(t.complementOf(i));
     }
     {
         const Interval i = t.findNthInterval(6);
-        std::cerr << i << std::endl;
         BOOST_REQUIRE_EQUAL(Interval(4, 5), i);
         BOOST_REQUIRE(t.complementOf(i));
     }
     {
         const Interval i = t.findNthInterval(2);
-        std::cerr << i << std::endl;
         BOOST_REQUIRE_EQUAL(Interval(6, 6), i);
         BOOST_REQUIRE(t.complementOf(i));
     }
     {
         const Interval i = t.findNthInterval(1);
-        std::cerr << i << std::endl;
         BOOST_REQUIRE_EQUAL(Interval(3, 3), i);
         BOOST_REQUIRE(t.complementOf(i));
     }
     {
         const Interval i = t.findNthInterval(0);
-        std::cerr << i << std::endl;
         BOOST_REQUIRE_EQUAL(Interval(1, 1), i);
         BOOST_REQUIRE(t.complementOf(i));
     }
     BOOST_REQUIRE_EQUAL(0, t.countIntervals());
+}
+
+BOOST_AUTO_TEST_CASE(Memory)
+{
+    class OldInterval
+    {
+      private:
+        Index _a;
+        Index _b;
+    };
+
+    struct OldNode
+    {
+        bool        isLeaf;
+        OldInterval interval;
+        Index       left;
+        Index       right;
+        Count       count;
+        Count       depth;
+    };
+
+    BOOST_CHECK(sizeof(Tree::Node) < sizeof(OldNode));
+    std::cerr << "Old interval size: " << sizeof(OldInterval)   << "\n"
+              << "Interval size:     " << sizeof(Interval)   << "\n"
+              << "Old node size:     " << sizeof(OldNode)    << "\n"
+              << "New node size:     " << sizeof(Tree::Node) << std::endl;
 }
 
 BOOST_AUTO_TEST_SUITE_END()
